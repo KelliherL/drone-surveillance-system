@@ -1,0 +1,71 @@
+# Build directories
+build/
+bin/
+lib/
+*.out
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# C++ compiled files
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+*.exe
+
+# IDE files
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+*.pro.user
+*.pro.user.*
+*.tmp
+*.temp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Logs and data
+*.log
+logs/
+data/recordings/
+data/temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Drone specific
+*.tlog
+*.rlog
+mission_logs/
+
+# Test coverage
+coverage/
+*.gcov
+*.gcda
+*.gcno
+
+# Documentation build
+docs/build/
+*.pdf
+
+# Config files with sensitive data
+config/secrets.json
+config/api_keys.txt
