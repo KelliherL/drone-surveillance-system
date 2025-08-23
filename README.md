@@ -60,11 +60,20 @@ make px4_sitl gazebo
 ### Running Simulation
 
 ```bash
-# Terminal 1: Start Gazebo simulation
-gazebo --verbose worlds/iris.world
+# 1. Clean up any previous sessions
+pkill -f px4
+pkill -f gazebo
+sleep 2
 
-# Terminal 2: Run surveillance system
-./bin/drone_surveillance
+# 2. Go to PX4 directory
+cd ~/PX4-Autopilot
+
+# 3. Launch PX4 + Gazebo
+make px4_sitl_default gazebo-classic
+
+# 4. In a NEW terminal window
+cd ~/drone-surveillance-system/build
+./bin/drone_surveillance_system
 ```
 
 ## Project Structure
@@ -144,5 +153,6 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 - Contact: [lachlankelliher@gmail.com]
 
 ---
+
 
 **Status**: 🚧 In Development | **Version**: 0.1.0 | **Last Updated**: August 2025
