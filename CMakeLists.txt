@@ -25,6 +25,7 @@ pkg_check_modules(MAVSDK REQUIRED mavsdk)
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}
     ${OpenCV_INCLUDE_DIRS}
     ${MAVSDK_INCLUDE_DIRS}
 )
@@ -32,29 +33,28 @@ include_directories(
 # Add link directories
 link_directories(${MAVSDK_LIBRARY_DIRS})
 
-# Collect source files
-file(GLOB_RECURSE SOURCES
-    "src/*.cpp"
-    "src/*.c"
+# Define source files explicitly (better than GLOB)
+set(SOURCES
+    src/main.cpp
+    src/DroneController.cpp
+    src/mission_utils.cpp
 )
 
-# Create main executable (if we have sources)
-if(SOURCES)
-    add_executable(${PROJECT_NAME} ${SOURCES})
+# Create main executable
+add_executable(${PROJECT_NAME} ${SOURCES})
 
-    # Link libraries - include dl for dynamic linking
-    target_link_libraries(${PROJECT_NAME}
-        mavsdk
-        ${OpenCV_LIBS}
-        Threads::Threads
-        dl
-    )
+# Link libraries - include dl for dynamic linking
+target_link_libraries(${PROJECT_NAME}
+    mavsdk
+    ${OpenCV_LIBS}
+    Threads::Threads
+    dl
+)
 
-    # Install targets
-    install(TARGETS ${PROJECT_NAME}
-        RUNTIME DESTINATION bin
-    )
-endif()
+# Install targets
+install(TARGETS ${PROJECT_NAME}
+    RUNTIME DESTINATION bin
+)
 
 # Enable testing
 enable_testing()
@@ -65,3 +65,4 @@ message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 message(STATUS "Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "MAVSDK libraries: ${MAVSDK_LIBRARIES}")
 message(STATUS "MAVSDK include dirs: ${MAVSDK_INCLUDE_DIRS}")
+message(STATUS "Source files: ${SOURCES}")
