@@ -24,6 +24,7 @@ pkg_check_modules(MAVSDK REQUIRED mavsdk)
 # Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
     ${OpenCV_INCLUDE_DIRS}
     ${MAVSDK_INCLUDE_DIRS}
 )
