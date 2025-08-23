@@ -79,18 +79,22 @@ cd ~/drone-surveillance-system/build
 ## Project Structure
 
 ```
+File Structure
 drone-surveillance-system/
+├── include/
+│   ├── DroneController.h     # Flight control interface
+│   ├── mission_utils.h       # Mission creation utilities
+│   ├── waypoint.h           # Mission data structures
+│   ├── result_types.h       # Error handling types
+│   └── logger.h             # Logging system interface
 ├── src/
-│   ├── flight_control/     # MAVSDK integration and flight logic
-│   ├── computer_vision/    # Object detection and tracking
-│   ├── ui/                # Ground control station
-│   └── utils/             # Utility functions
-├── include/               # Header files
-├── tests/                # Unit and integration tests
-├── config/               # Configuration files
-├── docs/                 # Documentation and diagrams
-├── scripts/              # Build and deployment scripts
-└── data/                 # Test data and recordings
+│   ├── main.cpp             # Program entry point
+│   ├── DroneController.cpp  # Flight control implementation
+│   ├── mission_utils.cpp    # Mission utilities
+│   ├── result_types.cpp     # Error handling implementation
+│   └── logger.cpp           # Logging implementation
+├── CMakeLists.txt          # Build configuration
+└── README.md              # Project documentation
 ```
 
 ## 🎯 Development Roadmap
@@ -156,3 +160,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 
 **Status**: 🚧 In Development | **Version**: 0.1.0 | **Last Updated**: August 2025
+
