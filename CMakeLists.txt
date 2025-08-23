@@ -18,6 +18,9 @@ find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
 
+# Try to find spdlog, if not found we'll use header-only mode
+find_package(spdlog QUIET)
+
 # Find MAVSDK using pkg-config
 pkg_check_modules(MAVSDK REQUIRED mavsdk)
 
@@ -38,6 +41,8 @@ set(SOURCES
     src/main.cpp
     src/DroneController.cpp
     src/mission_utils.cpp
+    src/result_types.cpp
+    src/logger.cpp
 )
 
 # Create main executable
@@ -50,6 +55,12 @@ target_link_libraries(${PROJECT_NAME}
     Threads::Threads
     dl
 )
+
+# Link spdlog if found
+if(spdlog_FOUND)
+    target_link_libraries(${PROJECT_NAME} spdlog::spdlog)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE SPDLOG_COMPILED_LIB)
+endif()
 
 # Install targets
 install(TARGETS ${PROJECT_NAME}

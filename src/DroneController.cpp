@@ -1,4 +1,5 @@
 #include "DroneController.h"
+#include "logger.h"
 #include <cmath>
 
 using namespace mavsdk;
@@ -6,15 +7,18 @@ using namespace mavsdk;
 DroneController::DroneController() : mavsdk_(Mavsdk::Configuration(255, 0, true)) {}
 
 bool DroneController::initialize(const std::string& connection_url) {
-    std::cout << "Initializing Drone Surveillance System..." << std::endl;
+    Logger::info("Initializing Drone Surveillance System...");
+    Logger::debug("Attempting connection to: " + connection_url);
 
     ConnectionResult connection_result = mavsdk_.add_any_connection(connection_url);
     if (connection_result != ConnectionResult::Success) {
-        std::cerr << "ERROR: Connection failed: " << connection_result << std::endl;
+        std::string error_msg = "Connection failed with result: " + std::to_string(static_cast<int>(connection_result));
+        Logger::error(error_msg);
         return false;
     }
 
-    std::cout << "Waiting for system to connect..." << std::endl;
+    Logger::info("Waiting for system to connect...");
+    Logger::debug("Looking for PX4 autopilot system (timeout: 30 seconds)");
 
     for (int i = 0; i < 30; ++i) {
         auto systems = mavsdk_.systems();
@@ -25,11 +29,12 @@ bool DroneController::initialize(const std::string& connection_url) {
             }
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        std::cout << "." << std::flush;
+        if (i % 5 == 0) Logger::debug("Connection attempt " + std::to_string(i + 1) + "/30");
     }
 
     if (!system_ || !system_->has_autopilot()) {
-        std::cerr << "\nERROR: No autopilot found, timing out." << std::endl;
+        Logger::error("No autopilot found after 30 second timeout");
+        Logger::info("To test with simulation: cd ~/PX4-Autopilot && make px4_sitl_default gazebo-classic");
         return false;
     }
 
@@ -38,48 +43,46 @@ bool DroneController::initialize(const std::string& connection_url) {
     telemetry_ = std::make_shared<Telemetry>(system_);
     mission_ = std::make_shared<Mission>(system_);
 
-    std::cout << "\nSystem connected successfully!" << std::endl;
+    Logger::info("System connected successfully!");
     return true;
 }
 
 bool DroneController::arm_and_takeoff(float altitude) {
-    std::cout << "Arming vehicle..." << std::endl;
+    Logger::info("Arming vehicle...");
 
     const Action::Result arm_result = action_->arm();
     if (arm_result != Action::Result::Success) {
-        std::cerr << "ERROR: Arming failed: " << arm_result << std::endl;
+        Logger::error("Arming failed: " + std::to_string(static_cast<int>(arm_result)));
         return false;
     }
 
-    std::cout << "Setting takeoff altitude to " << altitude << "m..." << std::endl;
+    Logger::info("Setting takeoff altitude to " + std::to_string(altitude) + "m");
     action_->set_takeoff_altitude(altitude);
 
-    std::cout << "Taking off..." << std::endl;
+    Logger::info("Taking off...");
     const Action::Result takeoff_result = action_->takeoff();
     if (takeoff_result != Action::Result::Success) {
-        std::cerr << "ERROR: Takeoff failed: " << takeoff_result << std::endl;
+        Logger::error("Takeoff failed: " + std::to_string(static_cast<int>(takeoff_result)));
         return false;
     }
 
-    std::cout << "Waiting for takeoff to complete..." << std::endl;
+    Logger::info("Waiting for takeoff to complete...");
     std::this_thread::sleep_for(std::chrono::seconds(15));
-    std::cout << "Takeoff successful!" << std::endl;
+    Logger::info("Takeoff successful!");
     return true;
 }
 
 bool DroneController::goto_waypoint(const Waypoint& waypoint) {
-    std::cout << "Flying to waypoint: " << waypoint.description << std::endl;
-    std::cout << "  Coordinates: "
-              << std::fixed << std::setprecision(6)
-              << "Lat: " << waypoint.latitude
-              << ", Lon: " << waypoint.longitude
-              << ", Alt: " << waypoint.altitude << "m" << std::endl;
+    Logger::info("Flying to waypoint: " + waypoint.description);
+    Logger::debug("Coordinates: Lat: " + std::to_string(waypoint.latitude) +
+                 ", Lon: " + std::to_string(waypoint.longitude) +
+                 ", Alt: " + std::to_string(waypoint.altitude) + "m");
 
     // Get current position first
     auto start_pos = telemetry_->position();
-    std::cout << "  Starting from: Lat: " << start_pos.latitude_deg
-              << ", Lon: " << start_pos.longitude_deg
-              << ", Alt: " << start_pos.relative_altitude_m << "m" << std::endl;
+    Logger::debug("Starting from: Lat: " + std::to_string(start_pos.latitude_deg) +
+                 ", Lon: " + std::to_string(start_pos.longitude_deg) +
+                 ", Alt: " + std::to_string(start_pos.relative_altitude_m) + "m");
 
     // Use offboard mode for better altitude control
     using namespace std::chrono_literals;
@@ -97,29 +100,26 @@ bool DroneController::goto_waypoint(const Waypoint& waypoint) {
     position_ned_yaw.down_m = -(waypoint.altitude); // NED uses negative for altitude
     position_ned_yaw.yaw_deg = NAN; // Don't change heading
 
-    std::cout << "  NED target: N=" << position_ned_yaw.north_m
-              << "m, E=" << position_ned_yaw.east_m
-              << "m, D=" << position_ned_yaw.down_m << "m" << std::endl;
+    Logger::trace("NED target: N=" + std::to_string(position_ned_yaw.north_m) +
+                 "m, E=" + std::to_string(position_ned_yaw.east_m) +
+                 "m, D=" + std::to_string(position_ned_yaw.down_m) + "m");
 
     // Start offboard mode
     offboard_->set_position_ned(position_ned_yaw);
 
     Offboard::Result offboard_result = offboard_->start();
     if (offboard_result != Offboard::Result::Success) {
-        std::cerr << "ERROR: Offboard start failed: " << offboard_result << std::endl;
-        // Fall back to goto_location
-        std::cout << "  Falling back to goto_location method..." << std::endl;
+        Logger::warn("Offboard start failed, falling back to goto_location");
         const Action::Result goto_result = action_->goto_location(
             waypoint.latitude, waypoint.longitude, waypoint.altitude, NAN);
 
         if (goto_result != Action::Result::Success) {
-            std::cerr << "ERROR: Goto location also failed: " << goto_result << std::endl;
+            Logger::error("Both offboard and goto_location failed");
             return false;
         }
     }
 
-    // Wait for arrival - check actual position
-    std::cout << "  Flying to waypoint..." << std::endl;
+    Logger::info("Flying to waypoint...");
 
     auto start_time = std::chrono::steady_clock::now();
 
@@ -133,16 +133,17 @@ bool DroneController::goto_waypoint(const Waypoint& waypoint) {
 
         // Check if we're close enough (within 20m horizontally, 2m vertically)
         if (lat_diff_current < 0.0002 && lon_diff_current < 0.0002 && alt_diff_current < 2.0) {
-            std::cout << "  Reached waypoint! Final position: Lat: " << current_pos.latitude_deg
-                      << ", Lon: " << current_pos.longitude_deg
-                      << ", Alt: " << current_pos.relative_altitude_m << "m" << std::endl;
+            Logger::info("Reached waypoint! Final position: Lat: " +
+                        std::to_string(current_pos.latitude_deg) +
+                        ", Lon: " + std::to_string(current_pos.longitude_deg) +
+                        ", Alt: " + std::to_string(current_pos.relative_altitude_m) + "m");
             break;
         }
 
         // Check if drone is losing altitude dangerously
         if (current_pos.relative_altitude_m < 2.0) {
-            std::cout << "  WARNING: Drone altitude too low (" << current_pos.relative_altitude_m
-                      << "m). Stopping offboard mode." << std::endl;
+            Logger::critical("Drone altitude too low (" + std::to_string(current_pos.relative_altitude_m) +
+                           "m). Stopping offboard mode");
             offboard_->stop();
             return false;
         }
@@ -155,36 +156,36 @@ bool DroneController::goto_waypoint(const Waypoint& waypoint) {
 
     // Hold position if specified
     if (waypoint.hold_time_s > 0) {
-        std::cout << "  Holding position for " << waypoint.hold_time_s << " seconds..." << std::endl;
+        Logger::info("Holding position for " + std::to_string(waypoint.hold_time_s) + " seconds...");
         std::this_thread::sleep_for(std::chrono::seconds((int)waypoint.hold_time_s));
     }
 
-    std::cout << "  Waypoint completed!" << std::endl;
+    Logger::info("Waypoint completed!");
     return true;
 }
 
 bool DroneController::execute_mission(const MissionConfig& mission) {
-    std::cout << "Starting mission: " << mission.mission_name << std::endl;
-    std::cout << "Total waypoints: " << mission.waypoints.size() << std::endl;
+    Logger::info("Starting mission: " + mission.mission_name);
+    Logger::info("Total waypoints: " + std::to_string(mission.waypoints.size()));
 
     for (size_t i = 0; i < mission.waypoints.size(); ++i) {
-        std::cout << "\n--- Waypoint " << (i + 1) << "/" << mission.waypoints.size() << " ---" << std::endl;
+        Logger::info("--- Waypoint " + std::to_string(i + 1) + "/" + std::to_string(mission.waypoints.size()) + " ---");
 
         if (!goto_waypoint(mission.waypoints[i])) {
-            std::cerr << "Failed to reach waypoint " << (i + 1) << std::endl;
+            Logger::error("Failed to reach waypoint " + std::to_string(i + 1));
             return false;
         }
     }
 
-    std::cout << "\nMission completed successfully!" << std::endl;
+    Logger::info("Mission completed successfully!");
     return true;
 }
 
 bool DroneController::return_to_home() {
-    std::cout << "Returning to home position..." << std::endl;
+    Logger::info("Returning to home position...");
     const Action::Result rth_result = action_->return_to_launch();
     if (rth_result != Action::Result::Success) {
-        std::cerr << "ERROR: Return to home failed: " << rth_result << std::endl;
+        Logger::error("Return to home failed: " + std::to_string(static_cast<int>(rth_result)));
         return false;
     }
     std::this_thread::sleep_for(std::chrono::seconds(15));
@@ -192,10 +193,10 @@ bool DroneController::return_to_home() {
 }
 
 bool DroneController::land_and_disarm() {
-    std::cout << "Landing..." << std::endl;
+    Logger::info("Landing...");
     const Action::Result land_result = action_->land();
     if (land_result != Action::Result::Success) {
-        std::cerr << "ERROR: Landing failed: " << land_result << std::endl;
+        Logger::error("Landing failed: " + std::to_string(static_cast<int>(land_result)));
         return false;
     }
 
@@ -203,7 +204,7 @@ bool DroneController::land_and_disarm() {
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    std::cout << "Landing and disarming successful!" << std::endl;
+    Logger::info("Landing and disarming successful!");
     return true;
 }
 
@@ -213,15 +214,13 @@ Telemetry::Position DroneController::get_current_position() {
 
 void DroneController::start_telemetry() {
     telemetry_->subscribe_position([](Telemetry::Position position) {
-        std::cout << "[TELEMETRY] Position: "
-                 << "Lat: " << std::fixed << std::setprecision(6) << position.latitude_deg
-                 << ", Lon: " << std::fixed << std::setprecision(6) << position.longitude_deg
-                 << ", Alt: " << std::fixed << std::setprecision(1) << position.relative_altitude_m << "m" << std::endl;
+        Logger::trace("[TELEMETRY] Position: Lat: " + std::to_string(position.latitude_deg) +
+                     ", Lon: " + std::to_string(position.longitude_deg) +
+                     ", Alt: " + std::to_string(position.relative_altitude_m) + "m");
     });
 
     telemetry_->subscribe_battery([](Telemetry::Battery battery) {
-        std::cout << "[TELEMETRY] Battery: " << std::fixed << std::setprecision(1)
-                  << battery.remaining_percent * 100.0f << "%" << std::endl;
+        Logger::trace("[TELEMETRY] Battery: " + std::to_string(battery.remaining_percent * 100.0f) + "%");
     });
 }
 
@@ -234,18 +233,17 @@ void DroneController::stop_telemetry() {
 void DroneController::print_current_status() {
     auto pos = telemetry_->position();
     auto battery = telemetry_->battery();
-    std::cout << "[STATUS] Position: "
-              << "Lat: " << std::fixed << std::setprecision(6) << pos.latitude_deg
-              << ", Lon: " << std::fixed << std::setprecision(6) << pos.longitude_deg
-              << ", Alt: " << std::fixed << std::setprecision(1) << pos.relative_altitude_m << "m"
-              << " | Battery: " << std::fixed << std::setprecision(1) << battery.remaining_percent * 100.0f << "%" << std::endl;
+    Logger::info("[STATUS] Position: Lat: " + std::to_string(pos.latitude_deg) +
+                ", Lon: " + std::to_string(pos.longitude_deg) +
+                ", Alt: " + std::to_string(pos.relative_altitude_m) + "m" +
+                " | Battery: " + std::to_string(battery.remaining_percent * 100.0f) + "%");
 }
 
 bool DroneController::is_ready_for_flight() {
     auto health = telemetry_->health();
-    std::cout << "Health Check:" << std::endl;
-    std::cout << "  GPS: " << (health.is_global_position_ok ? "OK" : "FAIL") << std::endl;
-    std::cout << "  Home Position: " << (health.is_home_position_ok ? "OK" : "FAIL") << std::endl;
+    Logger::info("Health Check:");
+    Logger::info("  GPS: " + std::string(health.is_global_position_ok ? "OK" : "FAIL"));
+    Logger::info("  Home Position: " + std::string(health.is_home_position_ok ? "OK" : "FAIL"));
 
     return health.is_global_position_ok && health.is_home_position_ok;
 }

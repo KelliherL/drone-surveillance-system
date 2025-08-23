@@ -13,6 +13,7 @@
 #include <mavsdk/plugins/mission/mission.h>
 
 #include "waypoint.h"
+#include "logger.h"
 
 class DroneController {
 private:
